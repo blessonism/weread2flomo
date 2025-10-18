@@ -1,45 +1,83 @@
-name: Sync WeRead to Flomo
+name: WeRead to Flomo Sync
 
 on:
+  # 定时任务：每天 UTC 00:00（北京时间 08:00）运行
   schedule:
-    # 每天 UTC 0:00 运行（北京时间 8:00）
-    - cron: "0 0 * * *"
-  workflow_dispatch:  # 允许手动触发
+    - cron: '0 0 * * *'
+  
+  # 支持手动触发
+  workflow_dispatch:
+    inputs:
+      days_limit:
+        description: '只同步最近几天的划线（留空使用配置文件默认值）'
+        required: false
+        default: ''
+      max_highlights:
+        description: '最多同步几条划线（留空使用配置文件默认值）'
+        required: false
+        default: ''
 
 jobs:
   sync:
     runs-on: ubuntu-latest
-
+    
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Run sync script
-        env:
-          WEREAD_COOKIE: ${{ secrets.WEREAD_COOKIE }}
-          FLOMO_API: ${{ secrets.FLOMO_API }}
-          CC_URL: ${{ secrets.CC_URL }}
-          CC_ID: ${{ secrets.CC_ID }}
-          CC_PASSWORD: ${{ secrets.CC_PASSWORD }}
-          AI_API_KEY: ${{ secrets.AI_API_KEY }}
-          AI_API_BASE: ${{ secrets.AI_API_BASE }}
-          DEFAULT_TAG: ${{ vars.DEFAULT_TAG || '#微信读书' }}
-        run: |
-          python sync_v2.py
-
-      - name: Commit and push synced records
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add synced_bookmarks.json
-          git diff --quiet && git diff --staged --quiet || (git commit -m "🔄 Update synced bookmarks [$(date +'%Y-%m-%d %H:%M:%S')]" && git push)
+    - name: 检出代码
+      uses: actions/checkout@v3
+      
+    - name: 设置 Python 环境
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        cache: 'pip'
+        
+    - name: 安装依赖
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: 配置环境变量
+      run: |
+        cat > .env << EOF
+        # Cookie Cloud 配置
+        CC_URL="${{ secrets.CC_URL }}"
+        CC_ID="${{ secrets.CC_ID }}"
+        CC_PASSWORD="${{ secrets.CC_PASSWORD }}"
+        
+        # 备用 Cookie（如果 Cookie Cloud 失败）
+        WEREAD_COOKIE="${{ secrets.WEREAD_COOKIE }}"
+        
+        # Flomo API
+        FLOMO_API="${{ secrets.FLOMO_API }}"
+        
+        # AI 配置（可选）
+        AI_API_KEY="${{ secrets.AI_API_KEY }}"
+        AI_API_BASE="${{ secrets.AI_API_BASE }}"
+        AI_MODEL="${{ secrets.AI_MODEL }}"
+        
+        # 同步配置（使用输入参数或默认值）
+        SYNC_DAYS_LIMIT="${{ github.event.inputs.days_limit || secrets.SYNC_DAYS_LIMIT }}"
+        SYNC_MAX_HIGHLIGHTS="${{ github.event.inputs.max_highlights || secrets.SYNC_MAX_HIGHLIGHTS }}"
+        EOF
+        
+    - name: 运行同步
+      run: |
+        python sync.py
+        
+    - name: 上传同步记录
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: sync-records
+        path: synced_bookmarks.json
+        retention-days: 30
+        
+    - name: 提交同步记录
+      if: success()
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+        git add synced_bookmarks.json
+        git diff --quiet && git diff --staged --quiet || (git commit -m "chore: update sync records [skip ci]" && git push)
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
