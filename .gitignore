@@ -68,3 +68,7 @@ Thumbs.db
 # Project specific
 # synced_bookmarks.json - 注释掉，GitHub Actions 需要提交此文件
 *.log
+
+# 添加 .env.example 到 .gitignore 的 exclude 列表
+# .env.example 应该被提交，但不包含真实数据
+!.env.example

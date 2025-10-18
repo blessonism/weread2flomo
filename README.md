@@ -5,7 +5,7 @@
 </div>
 
 <p align="center">
-    <strong>智能同步微信读书划线到 Flomo，支持 AI 摘要、智能标签、多模板等高级功能</strong>
+    <strong>同步微信读书划线到 Flomo，支持 AI 摘要、智能标签、定时同步等功能</strong>
 </p>
 
 <p align="center">
@@ -226,7 +226,7 @@ python test_single_highlight.py
 | AI 提供商 | `AI_PROVIDER` | `openai`（推荐）/ `local` / `none` |
 | API 密钥 | `AI_API_KEY` | OpenAI 格式的 API Key |
 | API 地址 | `AI_API_BASE` | 支持所有 OpenAI 兼容服务 |
-| 模型名称 | `AI_MODEL` | 如 `gpt-4`、`gpt-3.5-turbo` 等 |
+| 模型名称 | `AI_MODEL` | 如 `gpt-5`、`claude-4.5-sonnet` 等 |
 
 > 📖 **完整配置文档**：[CONFIG_GUIDE.md](docs/CONFIG_GUIDE.md)
 
@@ -274,8 +274,7 @@ AI 生成标签：
 
 ### 支持的 AI 服务
 
-- [x] **OpenAI**（GPT-4、GPT-3.5 等）
-- [x] **所有 OpenAI 兼容服务**（国内镜像、私有部署等）
+- [x] **所有 OpenAI 兼容服务**（国内镜像等）
 - [x] **本地规则引擎**（无需 API，基于关键词匹配）
 
 ---

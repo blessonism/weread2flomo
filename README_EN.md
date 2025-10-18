@@ -5,7 +5,7 @@
 </div>
 
 <p align="center">
-    <strong>Intelligently sync WeRead highlights to Flomo with AI summaries, smart tags, and multiple templates</strong>
+    <strong> Sync WeRead highlights to Flomo with AI summaries, smart tags, and multiple templates</strong>
 </p>
 
 <p align="center">
@@ -106,7 +106,7 @@ AI_API_KEY="your-ai-api-key"
 > - [Manual Cookie Guide](docs/COOKIE_GUIDE.md) (Quick and simple)
 > - [Complete Configuration Guide](docs/CONFIG_GUIDE.md)
 
-#### 4️⃣ Run Sync
+#### 4. Run Sync
 
 ```bash
 # Full sync
@@ -116,7 +116,7 @@ python sync.py
 python test_single_highlight.py
 ```
 
-#### 5️⃣ Check Results
+#### 5. Check Results
 
 Open your Flomo and enjoy your auto-synced reading notes!
 
@@ -231,7 +231,7 @@ Using the Pomodoro Technique, 25 minutes of focus + 5 minutes of rest, can signi
 | AI Provider | `AI_PROVIDER` | `openai` (recommended) / `local` / `none` |
 | API Key | `AI_API_KEY` | OpenAI-format API key |
 | API Base | `AI_API_BASE` | Supports all OpenAI-compatible services |
-| Model Name | `AI_MODEL` | e.g., `gpt-4`, `gpt-3.5-turbo` |
+| Model Name | `AI_MODEL` | e.g., `gpt-5`, `gpt-4.1` |
 
 > 📖 **Complete Documentation**: [CONFIG_GUIDE.md](docs/CONFIG_GUIDE.md)
 
@@ -279,7 +279,7 @@ AI Generated Tags:
 
 ### Supported AI Services
 
-- ✅ **OpenAI** (GPT-4, GPT-3.5, etc.)
+- ✅ **OpenAI** (GPT-4.1, GPT-5, etc.)
 - ✅ **All OpenAI-compatible services** (domestic mirrors, private deployments)
 - ✅ **Local rule engine** (no API needed, keyword-based)
 
@@ -478,8 +478,7 @@ Yes. Traditional cookies have short validity (<2 hours).
 <summary><strong>Q: Are AI tags accurate?</strong></summary>
 
 Accuracy depends on AI service:
-- **OpenAI GPT-4** - High accuracy (recommended)
-- **OpenAI GPT-3.5** - Medium accuracy
+- **OpenAI GPT-5** - High accuracy (recommended)
 - **Local rule engine** - Medium accuracy, keyword-based
 
 Recommend testing for a while and adjusting config based on results.
