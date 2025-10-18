@@ -25,6 +25,7 @@ try:
     from .template_renderer import TemplateRenderer, TagGenerator
     from .ai_tags import AITagGenerator
     from .ai_summary import AISummaryGenerator
+    from .log_utils import setup_logging
 except ImportError:
     # 如果相对导入失败，使用绝对导入（直接运行）
     # 将项目根目录添加到 sys.path
@@ -42,6 +43,7 @@ except ImportError:
     from src.template_renderer import TemplateRenderer, TagGenerator
     from src.ai_tags import AITagGenerator
     from src.ai_summary import AISummaryGenerator
+    from src.log_utils import setup_logging
 
 
 class WeRead2FlomoV2:
@@ -91,14 +93,20 @@ class WeRead2FlomoV2:
         return set()
 
     def save_synced_ids(self):
-        """保存已同步的划线ID"""
+        """保存已同步的划线ID（原子写入）"""
         try:
-            with open(self.synced_file, 'w', encoding='utf-8') as f:
-                json.dump({
-                    "synced_ids": list(self.synced_ids),
-                    "last_sync": datetime.now().isoformat(),
-                    "total_synced": len(self.synced_ids)
-                }, f, ensure_ascii=False, indent=2)
+            import tempfile
+            import os as _os
+            dir_name = _os.path.dirname(_os.path.abspath(self.synced_file)) or "."
+            data = {
+                "synced_ids": list(self.synced_ids),
+                "last_sync": datetime.now().isoformat(),
+                "total_synced": len(self.synced_ids)
+            }
+            with tempfile.NamedTemporaryFile('w', delete=False, dir=dir_name, encoding='utf-8') as tf:
+                json.dump(data, tf, ensure_ascii=False, indent=2)
+                temp_name = tf.name
+            _os.replace(temp_name, self.synced_file)
         except Exception as e:
             print(f"⚠️  保存同步记录失败: {e}")
 
@@ -107,9 +115,11 @@ class WeRead2FlomoV2:
         for chapter in chapters:
             if chapter.get("chapterUid") == chapterUid:
                 title = chapter.get("title", "")
-                level = chapter.get("level", 1)
-                if title:
-                    return f"第{level}章 - {title}"
+                # level 表示层级深度，非章节序号，这里优先使用 chapterIdx
+                idx = chapter.get("chapterIdx")
+                if title and isinstance(idx, int):
+                    return f"第{idx}章 - {title}"
+                return title or ""
         return ""
 
     def should_sync_bookmark(self, bookmark: Dict) -> bool:
@@ -368,6 +378,8 @@ class WeRead2FlomoV2:
 def main():
     """主函数"""
     try:
+        # 初始化日志
+        setup_logging()
         syncer = WeRead2FlomoV2()
         syncer.sync_all()
     except Exception as e:
