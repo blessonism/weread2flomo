@@ -24,6 +24,7 @@ try:
     from .config_manager import config
     from .template_renderer import TemplateRenderer, TagGenerator
     from .ai_tags import AITagGenerator
+    from .ai_summary import AISummaryGenerator
 except ImportError:
     # 如果相对导入失败，使用绝对导入（直接运行）
     # 将项目根目录添加到 sys.path
@@ -40,6 +41,7 @@ except ImportError:
     from src.config_manager import config
     from src.template_renderer import TemplateRenderer, TagGenerator
     from src.ai_tags import AITagGenerator
+    from src.ai_summary import AISummaryGenerator
 
 
 class WeRead2FlomoV2:
@@ -60,6 +62,7 @@ class WeRead2FlomoV2:
         self.template_renderer = TemplateRenderer()
         self.tag_generator = TagGenerator()
         self.ai_tag_generator = AITagGenerator()
+        self.ai_summary_generator = AISummaryGenerator()
 
         self.synced_file = "synced_bookmarks.json"
         self.synced_ids = self.load_synced_ids()
@@ -73,6 +76,7 @@ class WeRead2FlomoV2:
         print(f"   - 时间限制: {self.days_limit}天" if self.days_limit > 0 else "   - 时间限制: 无")
         print(f"   - 最大划线数: {self.max_highlights}")
         print(f"   - AI标签: {'启用' if self.ai_tag_generator.is_enabled() else '禁用'}")
+        print(f"   - AI摘要: {'启用' if self.ai_summary_generator.is_enabled() else '禁用'}")
         print(f"   - 默认模板: {config.get('default_template', 'simple')}\n")
 
     def load_synced_ids(self) -> Set[str]:
@@ -248,6 +252,20 @@ class WeRead2FlomoV2:
                 except Exception as e:
                     print(f"   ⚠️  AI标签生成失败: {e}")
 
+            # 生成AI摘要
+            ai_summary = None
+            if self.ai_summary_generator.is_enabled():
+                try:
+                    ai_summary = self.ai_summary_generator.generate_summary(
+                        highlight_text=marked_text,
+                        book_title=book_title,
+                        author=author
+                    )
+                    if ai_summary:
+                        print(f"   🤖 AI提炼: {ai_summary[:50]}...")
+                except Exception as e:
+                    print(f"   ⚠️  AI摘要生成失败: {e}")
+
             # 生成所有标签
             tags = self.tag_generator.generate_tags(
                 book_title=book_title,
@@ -257,7 +275,7 @@ class WeRead2FlomoV2:
                 ai_tags=ai_tags
             )
 
-            # 渲染内容
+            # 渲染内容（AI 摘要作为独立参数传递）
             content = self.template_renderer.render(
                 template=template,
                 book_title=book_title,
@@ -267,7 +285,8 @@ class WeRead2FlomoV2:
                 book_url=book_url,
                 note_text=note_text,
                 create_time=create_time_str,
-                tags=tags
+                tags=tags,
+                ai_summary=ai_summary or ""
             )
 
             # 发送到 flomo

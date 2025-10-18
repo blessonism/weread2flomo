@@ -253,6 +253,14 @@ class ConfigManager:
     def should_add_author_tag(self) -> bool:
         """是否添加作者作为标签"""
         return self.get('tags.add_author', False, env_key='ADD_AUTHOR_TAG')
+    
+    def should_enable_ai_summary(self) -> bool:
+        """是否启用AI摘要"""
+        return self.get('ai.enable_summary', False, env_key='ENABLE_AI_SUMMARY')
+    
+    def get_ai_summary_min_length(self) -> int:
+        """获取AI摘要的最小文本长度"""
+        return self.get('ai.summary_min_length', 100, env_key='AI_SUMMARY_MIN_LENGTH')
 
 
 # 全局配置实例

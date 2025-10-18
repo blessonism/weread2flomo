@@ -19,7 +19,8 @@ class TemplateRenderer:
         book_url: str = "",
         note_text: str = "",
         create_time: str = "",
-        tags: List[str] = None
+        tags: List[str] = None,
+        ai_summary: str = ""
     ) -> str:
         """
         渲染模板
@@ -34,6 +35,7 @@ class TemplateRenderer:
             note_text: 笔记内容
             create_time: 创建时间
             tags: 标签列表
+            ai_summary: AI 生成的摘要
 
         Returns:
             渲染后的内容
@@ -42,6 +44,11 @@ class TemplateRenderer:
         chapter_info = ""
         if chapter_name:
             chapter_info = f"📍 {chapter_name}"
+
+        # 处理 AI 摘要（明确标识为 AI 生成）
+        ai_summary_section = ""
+        if ai_summary:
+            ai_summary_section = f"✨ AI 摘要：{ai_summary}\n"
 
         # 处理笔记部分
         note_section = ""
@@ -62,6 +69,7 @@ class TemplateRenderer:
             highlight_text=highlight_text,
             chapter_info=chapter_info,
             book_url=book_url,
+            ai_summary_section=ai_summary_section,
             note_section=note_section,
             create_time=create_time,
             tags=tags_str

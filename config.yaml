@@ -32,7 +32,7 @@ templates:
 
       {chapter_info}
 
-      {tags}
+      {ai_summary_section}{tags}
 
   # 模板2: 标准模板（均衡）
   standard:
@@ -46,8 +46,7 @@ templates:
       {chapter_info}
       🔗 {book_url}
 
-      {note_section}
-      {tags}
+      {ai_summary_section}{note_section}{tags}
 
   # 模板3: 详细模板（最完整）
   detailed:
@@ -62,8 +61,7 @@ templates:
 
       📅 时间：{create_time}
 
-      {note_section}
-      {tags}
+      {ai_summary_section}{note_section}{tags}
 
 # ==================== 标签配置 ====================
 # 注意：敏感信息（AI_API_KEY）在 .env 文件中配置
@@ -173,6 +171,12 @@ ai:
 
   # AI 模型名称
   model: gpt-4.1
+
+  # AI 摘要功能（为长划线生成一句话概述）
+  enable_summary: true
+  
+  # 触发摘要的最小字符数（少于此长度不生成摘要）
+  summary_min_length: 100
 
   # AI标签生成的提示词
   tag_prompt: |
