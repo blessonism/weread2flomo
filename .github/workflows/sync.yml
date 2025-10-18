@@ -20,6 +20,9 @@ on:
 jobs:
   sync:
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: write  # 允许写入仓库内容
     
     steps:
     - name: 检出代码
