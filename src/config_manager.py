@@ -80,7 +80,8 @@ class ConfigManager:
         # 1. 优先从环境变量获取
         if env_key:
             env_value = os.getenv(env_key)
-            if env_value is not None:
+            # 如果环境变量存在且不为空字符串
+            if env_value is not None and env_value.strip() != '':
                 # 先尝试转换为数字（避免 '1' 被当作 True）
                 try:
                     if '.' in env_value:

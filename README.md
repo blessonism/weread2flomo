@@ -308,6 +308,36 @@ AI 生成标签：
 
 > **详细教程**：[GitHub Actions 配置指南](docs/GITHUB_ACTIONS_GUIDE.md)
 
+### 调整运行时间
+
+编辑 `.github/workflows/sync.yml` 中的 `schedule` 部分：
+
+```yaml
+schedule:
+  - cron: '0 0 * * *'    # 每天 UTC 00:00（北京时间 08:00）
+```
+
+**常用 Cron 表达式：**
+
+| 表达式 | 说明 | 北京时间 |
+|--------|------|----------|
+| `0 0 * * *` | 每天一次 | 08:00 |
+| `0 0,12 * * *` | 每天两次 | 08:00, 20:00 |
+| `0 */6 * * *` | 每 6 小时 | 08:00, 14:00, 20:00, 02:00 |
+| `0 22 * * *` | 每天一次 | 06:00 |
+| `0 0 * * 1` | 每周一 | 08:00 |
+
+**Cron 语法：**
+```
+┌─────────── 分钟 (0 - 59)
+│ ┌───────── 小时 (0 - 23)
+│ │ ┌─────── 日 (1 - 31)
+│ │ │ ┌───── 月 (1 - 12)
+│ │ │ │ ┌─── 星期 (0 - 6, 0 = 周日)
+│ │ │ │ │
+* * * * *
+```
+
 ---
 
 ## 💡 使用场景
@@ -532,6 +562,53 @@ python test_single_highlight.py
 
 </details>
 
+<details>
+<summary><strong>Q: GitHub Actions 定时任务为什么没有运行？</strong></summary>
+
+**常见原因：**
+
+1. **仓库不活跃** - GitHub 会在 60 天无活动后禁用 scheduled workflows
+   - 解决：进入 `Actions` 页面，点击 `Enable workflow` 重新启用
+
+2. **Actions 权限未设置** - 检查 `Settings` → `Actions` → `General`
+   - 确保允许运行 Actions
+   - 确保 Workflow permissions 设置为 `Read and write permissions`
+
+3. **Secrets 未配置** - 检查必需的 Secrets 是否都已设置
+   - 必需：`FLOMO_API` + (`WEREAD_COOKIE` 或 Cookie Cloud 配置)
+
+4. **查看运行日志** - 进入 `Actions` 查看是否有运行记录和错误信息
+
+</details>
+
+<details>
+<summary><strong>Q: GitHub Actions 运行失败怎么办？</strong></summary>
+
+**排查步骤：**
+
+1. 查看 Actions 运行日志，定位错误信息
+2. 检查 Secrets 配置是否正确
+3. 手动触发测试，查看是否能重现问题
+
+**常见错误：**
+- `Cookie invalid` - Cookie 过期，需要重新配置
+- `403 Forbidden` - 检查 Flomo API 是否正确
+- 权限错误 - 检查 Workflow permissions 设置
+
+定时任务失败时会自动创建 Issue 提醒，查看 Issue 中的详细信息。
+
+</details>
+
+<details>
+<summary><strong>Q: 如何查看 GitHub Actions 的同步记录？</strong></summary>
+
+1. 进入 `Actions` 标签页查看运行历史
+2. 点击具体运行记录查看日志
+3. 下载 `Artifacts` 中的 `sync-records` 获取详细记录
+4. 查看仓库的 `synced_bookmarks.json` 提交历史
+
+</details>
+
 ---
 
 ## 🎨 路线图
@@ -547,6 +624,7 @@ python test_single_highlight.py
 - [x] 增量同步
 - [x] Cookie Cloud 支持
 - [x] GitHub Actions 自动化
+- [x] 自动故障通知（Issue 创建）
 
 ### 进行中 🚧
 

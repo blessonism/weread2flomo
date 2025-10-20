@@ -3,7 +3,13 @@ name: WeRead to Flomo Sync
 on:
   # 定时任务：每天 UTC 00:00（北京时间 08:00）运行
   schedule:
-    - cron: '0 0 * * *'
+    - cron: '10 12 * * *'
+    
+  # 更多时间选项（取消注释即可使用）：
+  # - cron: '0 0,12 * * *'     # 每天 2 次（早 8:00 和晚 8:00 北京时间）
+  # - cron: '0 */6 * * *'      # 每 6 小时一次
+  # - cron: '0 22 * * *'       # 每天早上 6:00（北京时间）
+  # - cron: '0 0 * * 1'        # 每周一早上 8:00（北京时间）
   
   # 支持手动触发
   workflow_dispatch:
@@ -41,38 +47,87 @@ jobs:
         
     - name: 配置环境变量
       run: |
-        cat > .env << EOF
-        # Cookie Cloud 配置
-        CC_URL="${{ secrets.CC_URL }}"
-        CC_ID="${{ secrets.CC_ID }}"
-        CC_PASSWORD="${{ secrets.CC_PASSWORD }}"
+        # 创建 .env 文件（只写入非空的配置项）
+        touch .env
+        
+        # Cookie Cloud 配置（推荐）
+        if [ -n "${{ secrets.CC_URL }}" ]; then
+          echo 'CC_URL="${{ secrets.CC_URL }}"' >> .env
+        fi
+        if [ -n "${{ secrets.CC_ID }}" ]; then
+          echo 'CC_ID="${{ secrets.CC_ID }}"' >> .env
+        fi
+        if [ -n "${{ secrets.CC_PASSWORD }}" ]; then
+          echo 'CC_PASSWORD="${{ secrets.CC_PASSWORD }}"' >> .env
+        fi
         
         # 备用 Cookie（如果 Cookie Cloud 失败）
-        WEREAD_COOKIE="${{ secrets.WEREAD_COOKIE }}"
+        if [ -n "${{ secrets.WEREAD_COOKIE }}" ]; then
+          echo 'WEREAD_COOKIE="${{ secrets.WEREAD_COOKIE }}"' >> .env
+        fi
         
-        # Flomo API
-        FLOMO_API="${{ secrets.FLOMO_API }}"
+        # Flomo API（必需）
+        if [ -n "${{ secrets.FLOMO_API }}" ]; then
+          echo 'FLOMO_API="${{ secrets.FLOMO_API }}"' >> .env
+        fi
         
         # AI 配置（可选）
-        AI_API_KEY="${{ secrets.AI_API_KEY }}"
-        AI_API_BASE="${{ secrets.AI_API_BASE }}"
-        AI_MODEL="${{ secrets.AI_MODEL }}"
+        if [ -n "${{ secrets.AI_API_KEY }}" ]; then
+          echo 'AI_API_KEY="${{ secrets.AI_API_KEY }}"' >> .env
+        fi
+        if [ -n "${{ secrets.AI_API_BASE }}" ]; then
+          echo 'AI_API_BASE="${{ secrets.AI_API_BASE }}"' >> .env
+        fi
+        if [ -n "${{ secrets.AI_MODEL }}" ]; then
+          echo 'AI_MODEL="${{ secrets.AI_MODEL }}"' >> .env
+        fi
         
-        # 同步配置（使用输入参数或默认值）
-        SYNC_DAYS_LIMIT="${{ github.event.inputs.days_limit || secrets.SYNC_DAYS_LIMIT }}"
-        SYNC_MAX_HIGHLIGHTS="${{ github.event.inputs.max_highlights || secrets.SYNC_MAX_HIGHLIGHTS }}"
-        EOF
+        # 同步配置（使用输入参数或 secrets，优先使用输入参数）
+        DAYS_LIMIT="${{ github.event.inputs.days_limit }}"
+        if [ -z "$DAYS_LIMIT" ] && [ -n "${{ secrets.SYNC_DAYS_LIMIT }}" ]; then
+          DAYS_LIMIT="${{ secrets.SYNC_DAYS_LIMIT }}"
+        fi
+        if [ -n "$DAYS_LIMIT" ]; then
+          echo "SYNC_DAYS_LIMIT=$DAYS_LIMIT" >> .env
+        fi
+        
+        MAX_HIGHLIGHTS="${{ github.event.inputs.max_highlights }}"
+        if [ -z "$MAX_HIGHLIGHTS" ] && [ -n "${{ secrets.SYNC_MAX_HIGHLIGHTS }}" ]; then
+          MAX_HIGHLIGHTS="${{ secrets.SYNC_MAX_HIGHLIGHTS }}"
+        fi
+        if [ -n "$MAX_HIGHLIGHTS" ]; then
+          echo "SYNC_MAX_HIGHLIGHTS=$MAX_HIGHLIGHTS" >> .env
+        fi
+        
+        echo "✅ 环境变量配置完成"
         
     - name: 运行同步
       run: |
-        python sync.py
+        echo "🚀 开始同步..."
+        echo "⏰ 运行时间: $(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S')"
+        echo ""
         
-    - name: 上传同步记录
+        # 运行同步并捕获输出
+        python sync.py 2>&1 | tee sync.log
+        
+        # 检查是否成功
+        if [ ${PIPESTATUS[0]} -eq 0 ]; then
+          echo ""
+          echo "✅ 同步成功完成！"
+        else
+          echo ""
+          echo "❌ 同步失败，请查看日志"
+          exit 1
+        fi
+        
+    - name: 上传同步记录和日志
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: sync-records
-        path: synced_bookmarks.json
+        name: sync-records-${{ github.run_number }}
+        path: |
+          synced_bookmarks.json
+          sync.log
         retention-days: 30
         
     - name: 提交同步记录
@@ -84,3 +139,97 @@ jobs:
         git diff --quiet && git diff --staged --quiet || (git commit -m "chore: update sync records [skip ci]" && git push)
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: 生成同步摘要
+      if: always()
+      run: |
+        echo "## 📊 同步任务摘要" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **运行时间**: $(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S')" >> $GITHUB_STEP_SUMMARY
+        echo "- **触发方式**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+        
+        if [ -f sync.log ]; then
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📝 日志摘要" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -20 sync.log >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+        fi
+        
+    - name: 创建失败通知 Issue
+      if: failure() && github.event_name == 'schedule'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          let logContent = '日志文件不存在';
+          
+          if (fs.existsSync('sync.log')) {
+            logContent = fs.readFileSync('sync.log', 'utf8');
+            // 限制日志长度，避免 Issue 过大
+            if (logContent.length > 10000) {
+              logContent = logContent.substring(logContent.length - 10000);
+              logContent = '...(日志已截断)\n\n' + logContent;
+            }
+          }
+          
+          const title = `🚨 定时同步失败 - ${new Date().toISOString().split('T')[0]}`;
+          const body = `## 同步任务失败
+          
+          **时间**: ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}
+          **Workflow Run**: [#${context.runNumber}](${context.payload.repository.html_url}/actions/runs/${context.runId})
+          
+          ### 错误日志
+          
+          \`\`\`
+          ${logContent}
+          \`\`\`
+          
+          ### 可能的原因
+          
+          1. Cookie 已过期，需要更新
+          2. Flomo API 达到限制
+          3. 网络连接问题
+          4. 配置错误
+          
+          ### 解决方案
+          
+          1. 检查 GitHub Secrets 配置
+          2. 手动触发一次测试：Actions → WeRead to Flomo Sync → Run workflow
+          3. 查看完整日志：[点击这里](${context.payload.repository.html_url}/actions/runs/${context.runId})
+          
+          ---
+          *此 Issue 由 GitHub Actions 自动创建*`;
+          
+          // 检查是否已有今天的失败 Issue
+          const today = new Date().toISOString().split('T')[0];
+          const issues = await github.rest.issues.listForRepo({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            state: 'open',
+            labels: 'auto-sync-failure',
+            per_page: 5
+          });
+          
+          const existingIssue = issues.data.find(issue => 
+            issue.title.includes(today)
+          );
+          
+          if (existingIssue) {
+            // 更新现有 Issue
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: existingIssue.number,
+              body: `再次失败于 ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}\n\n${body}`
+            });
+          } else {
+            // 创建新 Issue
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['auto-sync-failure', 'bug']
+            });
+          }

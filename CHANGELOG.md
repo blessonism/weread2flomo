@@ -18,17 +18,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Issue templates for bugs and feature requests
 - Contributing guidelines
 - English README (README_EN.md)
+- 🎉 Automatic failure notification via Issue creation
+- 📊 GitHub Actions Summary for sync statistics
+- 📝 Complete log file preservation (30 days retention)
+- 🕐 Localized time display (Asia/Shanghai timezone)
+- ⏰ Flexible cron schedule options with examples
+- 🔍 Detailed error analysis in auto-created Issues
 
 ### Changed
 - Enhanced template system with AI summary section
 - Improved configuration management
 - Better error handling and logging
 - Optimized sync performance
+- 🔧 Smart environment variable handling (only write non-empty values)
+- 🔧 Enhanced Secrets priority: manual input > Secrets > config defaults
 
 ### Fixed
 - Cookie refresh mechanism
 - Bookmark list API handling
 - Chapter info retrieval timing
+- 🐛 Environment variable type safety (empty string handling)
+- 🐛 TypeError when comparing string with int in config manager
 
 ## [1.0.0] - 2024-10-17
 
