@@ -5,10 +5,10 @@
 # 同步设置（默认值）
 sync:
   # 只同步最近X天的划线（0表示同步所有）
-  days_limit: 100
+  days_limit: 300
 
   # 每次同步的最大划线数
-  max_highlights_per_sync: 50
+  max_highlights_per_sync: 10
 
   # 是否同步笔记（除了划线）
   sync_reviews: true
@@ -84,7 +84,7 @@ tags:
   add_author: false
 
   # 是否启用AI自动标签
-  enable_ai_tags: true
+  enable_ai_tags: flase
 
   # AI标签的最大数量
   max_ai_tags: 3
@@ -176,7 +176,7 @@ ai:
   enable_summary: true
   
   # 触发摘要的最小字符数（少于此长度不生成摘要）
-  summary_min_length: 100
+  summary_min_length: 80  # 降低到 50 字符，让更多划线可以生成摘要
 
   # AI标签生成的提示词
   tag_prompt: |

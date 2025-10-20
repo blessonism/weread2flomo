@@ -1,12 +1,12 @@
 name: WeRead to Flomo Sync
 
 on:
-  # 定时任务：每天 UTC 00:00（北京时间 08:00）运行
+  # 定时任务：每天北京时间 20:30 运行
   schedule:
-    - cron: '10 12 * * *'
+    - cron: '30 12 * * *'  # UTC 12:30 = 北京时间 20:30
     
   # 更多时间选项（取消注释即可使用）：
-  # - cron: '0 0,12 * * *'     # 每天 2 次（早 8:00 和晚 8:00 北京时间）
+  # - cron: '0 0,12 * * *'     # 每天 2 次（北京时间 08:00 和 20:00）
   # - cron: '0 */6 * * *'      # 每 6 小时一次
   # - cron: '0 22 * * *'       # 每天早上 6:00（北京时间）
   # - cron: '0 0 * * 1'        # 每周一早上 8:00（北京时间）
@@ -143,18 +143,197 @@ jobs:
     - name: 生成同步摘要
       if: always()
       run: |
-        echo "## 📊 同步任务摘要" >> $GITHUB_STEP_SUMMARY
+        echo "# 📊 WeRead2Flomo 同步任务报告" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "- **运行时间**: $(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S')" >> $GITHUB_STEP_SUMMARY
-        echo "- **触发方式**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
         
+        # 基本信息
+        echo "## 📅 基本信息" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| 项目 | 值 |" >> $GITHUB_STEP_SUMMARY
+        echo "| --- | --- |" >> $GITHUB_STEP_SUMMARY
+        echo "| 运行时间 | $(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M:%S') |" >> $GITHUB_STEP_SUMMARY
+        echo "| 触发方式 | ${{ github.event_name }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Workflow Run | [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # 提取配置信息
         if [ -f sync.log ]; then
+          echo "## ⚙️ 配置详情" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 📝 日志摘要" >> $GITHUB_STEP_SUMMARY
+          
+          # 提取配置信息部分
+          if grep -q "⚙️  配置信息" sync.log; then
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            sed -n '/⚙️  配置信息/,/开始同步微信读书划线到 flomo/p' sync.log | head -n -2 >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # 提取同步结果统计
+          echo "## 📈 同步结果" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if grep -q "✅ 同步完成!" sync.log; then
+            # 基本统计
+            echo "### 📊 基本统计" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| 指标 | 数值 | 说明 |" >> $GITHUB_STEP_SUMMARY
+            echo "| --- | --- | --- |" >> $GITHUB_STEP_SUMMARY
+            
+            PROCESSED_BOOKS=$(grep -A 1 "📊 基本统计:" sync.log | grep "处理书籍:" | sed -E 's/.*处理书籍: ([0-9]+)\/([0-9]+).*/\1/')
+            TOTAL_BOOKS=$(grep -A 1 "📊 基本统计:" sync.log | grep "处理书籍:" | sed -E 's/.*处理书籍: ([0-9]+)\/([0-9]+).*/\2/')
+            NEW_SYNCED=$(grep "本次新同步:" sync.log | tail -1 | sed -E 's/.*本次新同步: ([0-9]+).*/\1/')
+            TOTAL_SYNCED=$(grep "累计已同步:" sync.log | tail -1 | sed -E 's/.*累计已同步: ([0-9]+).*/\1/')
+            FAILED=$(grep "失败数量:" sync.log | tail -1 | sed -E 's/.*失败数量: ([0-9]+).*/\1/')
+            
+            echo "| 📚 处理书籍 | ${PROCESSED_BOOKS:-0}/${TOTAL_BOOKS:-0} | 本次处理的书籍数量 |" >> $GITHUB_STEP_SUMMARY
+            echo "| ✨ 新增划线 | ${NEW_SYNCED:-0} 条 | 本次新同步的划线 |" >> $GITHUB_STEP_SUMMARY
+            echo "| 📊 累计划线 | ${TOTAL_SYNCED:-0} 条 | 历史累计同步数量 |" >> $GITHUB_STEP_SUMMARY
+            if [ "${FAILED:-0}" -gt 0 ]; then
+              echo "| ❌ 失败数量 | ${FAILED:-0} 条 | 发送失败的划线 |" >> $GITHUB_STEP_SUMMARY
+            fi
+            echo "" >> $GITHUB_STEP_SUMMARY
+            
+            # 性能指标
+            if grep -q "⏱️  性能指标:" sync.log; then
+              echo "### ⏱️  性能指标" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "| 指标 | 数值 |" >> $GITHUB_STEP_SUMMARY
+              echo "| --- | --- |" >> $GITHUB_STEP_SUMMARY
+              
+              DURATION=$(grep "同步耗时:" sync.log | tail -1 | sed -E 's/.*同步耗时: ([0-9.]+) 秒.*/\1/')
+              SPEED=$(grep "平均速度:" sync.log | tail -1 | sed -E 's/.*平均速度: ([0-9.]+) 条.*/\1/')
+              AVG_TIME=$(grep "平均耗时:" sync.log | tail -1 | sed -E 's/.*平均耗时: ([0-9.]+) 秒.*/\1/')
+              
+              if [ -n "$DURATION" ]; then
+                DURATION_MIN=$(awk "BEGIN {printf \"%.1f\", $DURATION/60}")
+                echo "| ⏰ 同步耗时 | ${DURATION}秒 (${DURATION_MIN}分钟) |" >> $GITHUB_STEP_SUMMARY
+              fi
+              if [ -n "$SPEED" ]; then
+                echo "| 🚀 平均速度 | ${SPEED} 条/分钟 |" >> $GITHUB_STEP_SUMMARY
+              fi
+              if [ -n "$AVG_TIME" ]; then
+                echo "| ⏳ 平均耗时 | ${AVG_TIME} 秒/条 |" >> $GITHUB_STEP_SUMMARY
+              fi
+              echo "" >> $GITHUB_STEP_SUMMARY
+            fi
+            
+            # API 使用情况
+            echo "### 📤 API 使用情况" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| 指标 | 数值 |" >> $GITHUB_STEP_SUMMARY
+            echo "| --- | --- |" >> $GITHUB_STEP_SUMMARY
+            
+            API_CALLS=$(grep "API 调用:" sync.log | tail -1 | sed -E 's/.*API 调用: ([0-9]+)\/([0-9]+).*/\1/')
+            API_LIMIT=$(grep "API 调用:" sync.log | tail -1 | sed -E 's/.*API 调用: ([0-9]+)\/([0-9]+).*/\2/')
+            API_USAGE=$(grep "使用率:" sync.log | tail -1 | sed -E 's/.*使用率: ([0-9.]+)%.*/\1/')
+            API_REMAINING=$(grep "剩余配额:" sync.log | tail -1 | sed -E 's/.*剩余配额: ([0-9]+).*/\1/')
+            
+            echo "| 🔗 API 调用 | ${API_CALLS:-0}/${API_LIMIT:-100} 次 |" >> $GITHUB_STEP_SUMMARY
+            if [ -n "$API_USAGE" ]; then
+              echo "| 📈 使用率 | ${API_USAGE}% |" >> $GITHUB_STEP_SUMMARY
+            fi
+            if [ -n "$API_REMAINING" ]; then
+              echo "| 💰 剩余配额 | ${API_REMAINING} 次 |" >> $GITHUB_STEP_SUMMARY
+            fi
+            echo "" >> $GITHUB_STEP_SUMMARY
+            
+            # AI 功能统计
+            if grep -q "🤖 AI 功能统计:" sync.log; then
+              echo "### 🤖 AI 功能统计" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              
+              if grep -q "AI 摘要:" sync.log; then
+                SUMMARY_ATTEMPTED=$(grep -A 3 "AI 摘要:" sync.log | grep "尝试:" | sed -E 's/.*尝试: ([0-9]+).*/\1/')
+                SUMMARY_SUCCESS=$(grep -A 3 "AI 摘要:" sync.log | grep "成功:" | sed -E 's/.*成功: ([0-9]+).*/\1/')
+                SUMMARY_RATE=$(grep -A 3 "AI 摘要:" sync.log | grep "成功率:" | sed -E 's/.*成功率: ([0-9.]+)%.*/\1/')
+                
+                echo "**AI 摘要:**" >> $GITHUB_STEP_SUMMARY
+                echo "- 尝试: ${SUMMARY_ATTEMPTED:-0} 次" >> $GITHUB_STEP_SUMMARY
+                echo "- 成功: ${SUMMARY_SUCCESS:-0} 次" >> $GITHUB_STEP_SUMMARY
+                echo "- 成功率: ${SUMMARY_RATE:-0}%" >> $GITHUB_STEP_SUMMARY
+                echo "" >> $GITHUB_STEP_SUMMARY
+              fi
+              
+              if grep -q "AI 标签:" sync.log; then
+                TAGS_ATTEMPTED=$(grep -A 3 "AI 标签:" sync.log | grep "尝试:" | sed -E 's/.*尝试: ([0-9]+).*/\1/')
+                TAGS_SUCCESS=$(grep -A 3 "AI 标签:" sync.log | grep "成功:" | sed -E 's/.*成功: ([0-9]+).*/\1/')
+                TAGS_RATE=$(grep -A 3 "AI 标签:" sync.log | grep "成功率:" | sed -E 's/.*成功率: ([0-9.]+)%.*/\1/')
+                
+                echo "**AI 标签:**" >> $GITHUB_STEP_SUMMARY
+                echo "- 尝试: ${TAGS_ATTEMPTED:-0} 次" >> $GITHUB_STEP_SUMMARY
+                echo "- 成功: ${TAGS_SUCCESS:-0} 次" >> $GITHUB_STEP_SUMMARY
+                echo "- 成功率: ${TAGS_RATE:-0}%" >> $GITHUB_STEP_SUMMARY
+                echo "" >> $GITHUB_STEP_SUMMARY
+              fi
+            fi
+            
+            # 书籍处理详情
+            if grep -q "📚 书籍处理详情:" sync.log; then
+              echo "### 📚 书籍处理详情" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+              sed -n '/📚 书籍处理详情:/,/^$/p' sync.log | grep "《" | head -10 >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+            fi
+            
+            # 错误和警告
+            if grep -q "❌ 错误" sync.log || grep -q "⚠️  警告" sync.log; then
+              echo "### ⚠️  错误和警告" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              
+              if grep -q "❌ 错误" sync.log; then
+                ERROR_COUNT=$(grep "❌ 错误" sync.log | sed -E 's/.*❌ 错误 \(([0-9]+)\).*/\1/')
+                echo "**错误 (${ERROR_COUNT:-0}):**" >> $GITHUB_STEP_SUMMARY
+                echo '```' >> $GITHUB_STEP_SUMMARY
+                sed -n '/❌ 错误/,/^$/p' sync.log | grep "   -" | head -5 >> $GITHUB_STEP_SUMMARY
+                echo '```' >> $GITHUB_STEP_SUMMARY
+                echo "" >> $GITHUB_STEP_SUMMARY
+              fi
+              
+              if grep -q "⚠️  警告" sync.log; then
+                WARNING_COUNT=$(grep "⚠️  警告" sync.log | sed -E 's/.*⚠️  警告 \(([0-9]+)\).*/\1/')
+                echo "**警告 (${WARNING_COUNT:-0}):**" >> $GITHUB_STEP_SUMMARY
+                echo '```' >> $GITHUB_STEP_SUMMARY
+                sed -n '/⚠️  警告/,/^$/p' sync.log | grep "   -" | head -5 >> $GITHUB_STEP_SUMMARY
+                echo '```' >> $GITHUB_STEP_SUMMARY
+                echo "" >> $GITHUB_STEP_SUMMARY
+              fi
+            fi
+            
+            # 建议
+            if grep -q "💡 建议:" sync.log; then
+              echo "### 💡 建议" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              sed -n '/💡 建议:/,/^==/p' sync.log | grep "   -" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+            fi
+            
+          else
+            echo "❌ 同步失败，请查看详细日志" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # 详细日志（最后30行）
+          echo "## 📝 详细日志" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "<details>" >> $GITHUB_STEP_SUMMARY
+          echo "<summary>点击展开查看完整日志（最后30行）</summary>" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          tail -20 sync.log >> $GITHUB_STEP_SUMMARY
+          tail -30 sync.log >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "</details>" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "⚠️ 未找到日志文件" >> $GITHUB_STEP_SUMMARY
         fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "---" >> $GITHUB_STEP_SUMMARY
+        echo "*由 [WeRead2Flomo](https://github.com/${{ github.repository }}) 自动生成*" >> $GITHUB_STEP_SUMMARY
         
     - name: 创建失败通知 Issue
       if: failure() && github.event_name == 'schedule'

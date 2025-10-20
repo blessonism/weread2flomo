@@ -44,6 +44,54 @@ except ImportError:
     from src.ai_summary import AISummaryGenerator
 
 
+class SyncStatistics:
+    """同步统计信息"""
+    
+    def __init__(self):
+        self.start_time = time.time()
+        self.processed_books = 0
+        self.total_books = 0
+        self.synced_highlights = 0
+        self.skipped_highlights = 0
+        self.failed_highlights = 0
+        
+        # AI 统计
+        self.ai_summary_generated = 0
+        self.ai_summary_attempted = 0
+        self.ai_tags_generated = 0
+        self.ai_tags_attempted = 0
+        
+        # 书籍详情
+        self.book_details = []  # [(书名, 作者, 同步数量)]
+        
+        # 错误和警告
+        self.errors = []
+        self.warnings = []
+    
+    def get_duration(self) -> float:
+        """获取同步耗时（秒）"""
+        return time.time() - self.start_time
+    
+    def get_speed(self) -> float:
+        """获取同步速度（条/分钟）"""
+        duration_minutes = self.get_duration() / 60
+        if duration_minutes > 0:
+            return self.synced_highlights / duration_minutes
+        return 0.0
+    
+    def get_ai_summary_success_rate(self) -> float:
+        """获取 AI 摘要成功率"""
+        if self.ai_summary_attempted > 0:
+            return (self.ai_summary_generated / self.ai_summary_attempted) * 100
+        return 0.0
+    
+    def get_ai_tags_success_rate(self) -> float:
+        """获取 AI 标签成功率"""
+        if self.ai_tags_attempted > 0:
+            return (self.ai_tags_generated / self.ai_tags_attempted) * 100
+        return 0.0
+
+
 class WeRead2FlomoV2:
     """微信读书到 Flomo 的增强同步器"""
 
@@ -71,13 +119,49 @@ class WeRead2FlomoV2:
         self.days_limit = config.get_days_limit()
         self.max_highlights = config.get_max_highlights()
         self.request_delay = config.get_request_delay()
+        
+        # 统计信息
+        self.stats = SyncStatistics()
 
-        print(f"\n⚙️  配置加载:")
-        print(f"   - 时间限制: {self.days_limit}天" if self.days_limit > 0 else "   - 时间限制: 无")
-        print(f"   - 最大划线数: {self.max_highlights}")
-        print(f"   - AI标签: {'启用' if self.ai_tag_generator.is_enabled() else '禁用'}")
-        print(f"   - AI摘要: {'启用' if self.ai_summary_generator.is_enabled() else '禁用'}")
-        print(f"   - 默认模板: {config.get('default_template', 'simple')}\n")
+        print(f"\n{'='*70}")
+        print(f"⚙️  配置信息")
+        print(f"{'='*70}")
+        
+        # 同步配置
+        print(f"\n📋 同步配置:")
+        print(f"   - 时间限制: {self.days_limit}天" if self.days_limit > 0 else "   - 时间限制: 无限制（同步所有）")
+        print(f"   - 每次最大划线数: {self.max_highlights}")
+        print(f"   - 同步笔记: {'是' if config.should_sync_reviews() else '否'}")
+        print(f"   - 请求延迟: {self.request_delay}秒")
+        
+        # 模板配置
+        print(f"\n📝 模板配置:")
+        default_template = config.get('default_template', 'simple')
+        print(f"   - 默认模板: {default_template}")
+        print(f"   - 层级标签: {'启用' if config.get('tags.use_hierarchical_tags', True) else '禁用'}")
+        
+        # AI 配置
+        print(f"\n🤖 AI 功能:")
+        ai_provider = config.get_ai_provider()
+        print(f"   - AI 提供商: {ai_provider}")
+        if self.ai_tag_generator.is_enabled():
+            print(f"   - AI 标签: ✅ 启用")
+            print(f"     · 最大标签数: {config.get('tags.max_ai_tags', 3)}")
+        else:
+            print(f"   - AI 标签: ❌ 禁用")
+        
+        if self.ai_summary_generator.is_enabled():
+            print(f"   - AI 摘要: ✅ 启用")
+            print(f"     · 模型: {config.get_ai_model()}")
+            print(f"     · 最小长度: {self.ai_summary_generator.min_length} 字符")
+        else:
+            print(f"   - AI 摘要: ❌ 禁用")
+        
+        # Flomo 配置
+        print(f"\n📤 Flomo 配置:")
+        print(f"   - 每日限制: {self.flomo_client.daily_limit} 次")
+        
+        print(f"\n{'='*70}\n")
 
     def load_synced_ids(self) -> Set[str]:
         """加载已同步的划线ID"""
@@ -159,6 +243,8 @@ class WeRead2FlomoV2:
         author = book_info_obj.get("author", "未知作者")
 
         print(f"\n📚 处理书籍: 《{book_title}》- {author}")
+        
+        book_synced_count = 0  # 本书同步的划线数
 
         # 判断书籍分类
         category = config.get_book_category(book_title, author)
@@ -243,18 +329,24 @@ class WeRead2FlomoV2:
             # 生成AI标签
             ai_tags = []
             if self.ai_tag_generator.is_enabled():
+                self.stats.ai_tags_attempted += 1
                 try:
                     ai_tags = self.ai_tag_generator.generate_tags(
                         book_title=book_title,
                         author=author,
                         highlight_text=marked_text
                     )
+                    if ai_tags:
+                        self.stats.ai_tags_generated += 1
                 except Exception as e:
-                    print(f"   ⚠️  AI标签生成失败: {e}")
+                    error_msg = f"AI标签生成失败: {e}"
+                    print(f"   ⚠️  {error_msg}")
+                    self.stats.warnings.append(error_msg)
 
             # 生成AI摘要
             ai_summary = None
             if self.ai_summary_generator.is_enabled():
+                self.stats.ai_summary_attempted += 1
                 try:
                     ai_summary = self.ai_summary_generator.generate_summary(
                         highlight_text=marked_text,
@@ -262,9 +354,12 @@ class WeRead2FlomoV2:
                         author=author
                     )
                     if ai_summary:
+                        self.stats.ai_summary_generated += 1
                         print(f"   🤖 AI提炼: {ai_summary[:50]}...")
                 except Exception as e:
-                    print(f"   ⚠️  AI摘要生成失败: {e}")
+                    error_msg = f"AI摘要生成失败: {e}"
+                    print(f"   ⚠️  {error_msg}")
+                    self.stats.warnings.append(error_msg)
 
             # 生成所有标签
             tags = self.tag_generator.generate_tags(
@@ -295,16 +390,26 @@ class WeRead2FlomoV2:
             if success:
                 self.synced_ids.add(bookmark_id)
                 synced_count += 1
+                book_synced_count += 1
                 # 添加延迟
                 time.sleep(self.request_delay)
             else:
+                self.stats.failed_highlights += 1
+                error_msg = f"发送失败: {marked_text[:30]}..."
                 print(f"   跳过划线: {marked_text[:30]}...")
+                self.stats.errors.append(error_msg)
                 break
 
             # 检查是否达到每日限制
             if self.flomo_client.get_request_count() >= self.flomo_client.daily_limit:
-                print(f"\n⚠️  已达到 flomo 每日API调用限制")
+                warning_msg = "已达到 flomo 每日API调用限制"
+                print(f"\n⚠️  {warning_msg}")
+                self.stats.warnings.append(warning_msg)
                 break
+
+        # 记录本书的同步详情
+        if book_synced_count > 0:
+            self.stats.book_details.append((book_title, author, book_synced_count))
 
         return synced_count
 
@@ -321,6 +426,7 @@ class WeRead2FlomoV2:
             print("❌ 没有找到任何书籍")
             return
 
+        self.stats.total_books = len(books)
         print(f"\n📖 找到 {len(books)} 本书")
 
         total_synced = 0
@@ -331,13 +437,17 @@ class WeRead2FlomoV2:
             try:
                 # 如果已达到全局限制，停止处理
                 if remaining_quota <= 0:
-                    print(f"\n⚠️  已达到全局划线限制 ({self.max_highlights} 条)，停止同步")
+                    warning_msg = f"已达到全局划线限制 ({self.max_highlights} 条)"
+                    print(f"\n⚠️  {warning_msg}，停止同步")
+                    self.stats.warnings.append(warning_msg)
                     break
 
                 synced_count = self.sync_book(book, max_count=remaining_quota)
                 total_synced += synced_count
+                self.stats.synced_highlights += synced_count
                 remaining_quota -= synced_count
                 processed_books += 1
+                self.stats.processed_books += 1
 
                 # 检查是否达到每日限制
                 if self.flomo_client.get_request_count() >= self.flomo_client.daily_limit:
@@ -349,20 +459,101 @@ class WeRead2FlomoV2:
                     time.sleep(2)
 
             except Exception as e:
-                print(f"\n⚠️  处理书籍时出错: {e}")
+                error_msg = f"处理书籍时出错: {e}"
+                print(f"\n⚠️  {error_msg}")
+                self.stats.errors.append(error_msg)
                 continue
 
         # 保存同步记录
         self.save_synced_ids()
 
-        # 输出统计信息
+        # 输出详细统计信息
+        self._print_detailed_summary(total_synced, processed_books, len(books))
+
+    def _print_detailed_summary(self, total_synced: int, processed_books: int, total_books: int):
+        """输出详细的同步摘要"""
+        duration = self.stats.get_duration()
+        speed = self.stats.get_speed()
+        
         print("\n" + "=" * 70)
-        print(f"✅ 同步完成!")
-        print(f"   处理书籍: {processed_books}/{len(books)}")
-        print(f"   本次新同步: {total_synced} 条划线")
-        print(f"   累计已同步: {len(self.synced_ids)} 条划线")
-        print(f"   API 调用次数: {self.flomo_client.get_request_count()}/{self.flomo_client.daily_limit}")
+        print("✅ 同步完成!")
         print("=" * 70)
+        
+        # 基本统计
+        print(f"\n📊 基本统计:")
+        print(f"   - 处理书籍: {processed_books}/{total_books}")
+        print(f"   - 本次新同步: {total_synced} 条划线")
+        print(f"   - 累计已同步: {len(self.synced_ids)} 条划线")
+        print(f"   - 失败数量: {self.stats.failed_highlights} 条")
+        
+        # 性能指标
+        print(f"\n⏱️  性能指标:")
+        print(f"   - 同步耗时: {duration:.1f} 秒 ({duration/60:.1f} 分钟)")
+        if total_synced > 0:
+            print(f"   - 平均速度: {speed:.1f} 条/分钟")
+            print(f"   - 平均耗时: {duration/total_synced:.1f} 秒/条")
+        
+        # API 使用情况
+        api_count = self.flomo_client.get_request_count()
+        api_limit = self.flomo_client.daily_limit
+        api_usage = (api_count / api_limit) * 100
+        api_remaining = api_limit - api_count
+        
+        print(f"\n📤 API 使用情况:")
+        print(f"   - API 调用: {api_count}/{api_limit} 次")
+        print(f"   - 使用率: {api_usage:.1f}%")
+        print(f"   - 剩余配额: {api_remaining} 次")
+        if api_remaining > 0 and total_synced > 0:
+            estimated_more = int(api_remaining / (api_count / total_synced))
+            print(f"   - 预计还可同步: 约 {estimated_more} 条")
+        
+        # AI 功能统计
+        if self.ai_summary_generator.is_enabled() or self.ai_tag_generator.is_enabled():
+            print(f"\n🤖 AI 功能统计:")
+            
+            if self.ai_summary_generator.is_enabled():
+                summary_rate = self.stats.get_ai_summary_success_rate()
+                print(f"   - AI 摘要:")
+                print(f"     · 尝试: {self.stats.ai_summary_attempted} 次")
+                print(f"     · 成功: {self.stats.ai_summary_generated} 次")
+                print(f"     · 成功率: {summary_rate:.1f}%")
+            
+            if self.ai_tag_generator.is_enabled():
+                tags_rate = self.stats.get_ai_tags_success_rate()
+                print(f"   - AI 标签:")
+                print(f"     · 尝试: {self.stats.ai_tags_attempted} 次")
+                print(f"     · 成功: {self.stats.ai_tags_generated} 次")
+                print(f"     · 成功率: {tags_rate:.1f}%")
+        
+        # 书籍处理详情
+        if self.stats.book_details:
+            print(f"\n📚 书籍处理详情:")
+            for book_title, author, count in self.stats.book_details[:10]:  # 最多显示 10 本
+                print(f"   - 《{book_title}》 ({author}): {count} 条")
+            if len(self.stats.book_details) > 10:
+                print(f"   ... 还有 {len(self.stats.book_details) - 10} 本书")
+        
+        # 错误和警告
+        if self.stats.errors:
+            print(f"\n❌ 错误 ({len(self.stats.errors)}):")
+            for error in self.stats.errors[:5]:  # 最多显示 5 个
+                print(f"   - {error}")
+            if len(self.stats.errors) > 5:
+                print(f"   ... 还有 {len(self.stats.errors) - 5} 个错误")
+        
+        if self.stats.warnings:
+            print(f"\n⚠️  警告 ({len(self.stats.warnings)}):")
+            for warning in self.stats.warnings[:5]:  # 最多显示 5 个
+                print(f"   - {warning}")
+            if len(self.stats.warnings) > 5:
+                print(f"   ... 还有 {len(self.stats.warnings) - 5} 个警告")
+        
+        # 提示信息（仅在有重要信息时显示）
+        if processed_books < total_books:
+            remaining = total_books - processed_books
+            print(f"\n💡 下次同步将继续处理剩余的 {remaining} 本书")
+        
+        print("\n" + "=" * 70)
 
 
 def main():
