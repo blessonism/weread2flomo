@@ -218,8 +218,8 @@ jobs:
               echo "" >> $GITHUB_STEP_SUMMARY
             fi
             
-            # API 使用情况
-            echo "### 📤 API 使用情况" >> $GITHUB_STEP_SUMMARY
+            # Flomo API 使用情况
+            echo "### 📤 Flomo API 使用情况" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "| 指标 | 数值 |" >> $GITHUB_STEP_SUMMARY
             echo "| --- | --- |" >> $GITHUB_STEP_SUMMARY

@@ -28,25 +28,29 @@ templates:
     format: |
       {highlight_text}
 
+      {ai_summary_section}
+      
       📖 《{book_title}》· {author}
 
       {chapter_info}
 
-      {ai_summary_section}{tags}
+      {tags}
 
   # 模板2: 标准模板（均衡）
   standard:
     name: "标准模板"
     description: "标准格式，包含完整信息"
     format: |
-      📖 《{book_title}》- {author}
-
       > {highlight_text}
+
+      {ai_summary_section}
+      
+      📖 《{book_title}》- {author}
 
       {chapter_info}
       🔗 {book_url}
 
-      {ai_summary_section}{note_section}{tags}
+      {note_section}{tags}
 
   # 模板3: 详细模板（最完整）
   detailed:
@@ -55,13 +59,15 @@ templates:
     format: |
       {highlight_text}
 
+      {ai_summary_section}
+      
       📚 来源：《{book_title}》· {author}
 
       📂 章节：{chapter_info}
 
       📅 时间：{create_time}
 
-      {ai_summary_section}{note_section}{tags}
+      {note_section}{tags}
 
 # ==================== 标签配置 ====================
 # 注意：敏感信息（AI_API_KEY）在 .env 文件中配置
@@ -84,7 +90,7 @@ tags:
   add_author: false
 
   # 是否启用AI自动标签
-  enable_ai_tags: flase
+  enable_ai_tags: false
 
   # AI标签的最大数量
   max_ai_tags: 3
@@ -170,7 +176,7 @@ ai:
   api_base: https://yunwu.ai/v1
 
   # AI 模型名称
-  model: gpt-4.1
+  model: gpt-5
 
   # AI 摘要功能（为长划线生成一句话概述）
   enable_summary: true

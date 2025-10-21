@@ -609,6 +609,18 @@ python test_single_highlight.py
 
 </details>
 
+<details>
+<summary><strong>Q: 为什么定时任务实际运行时间和设置的不一样？</strong></summary>
+
+GitHub Actions 的 `schedule` 不保证精确时间：
+- **只保证不早于设定时间**，延迟 5 分钟到 2 小时都属正常
+- **延迟受服务器负载影响**，UTC 00:00（北京时间 08:00）是全球高峰，延迟最严重
+- **建议选择非高峰时段**，如北京时间晚上 20:30（UTC 12:30）
+
+如需精确执行，考虑使用云函数 + Webhook 触发。
+
+</details>
+
 ---
 
 ## 🎨 路线图
@@ -673,6 +685,7 @@ python test_single_highlight.py
     <img src="https://contrib.rocks/image?repo=blessonism/weread2flomo&max=20" alt="Contributors" />
   </a>
 </p>
+
 
 ---
 
