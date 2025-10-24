@@ -401,6 +401,17 @@ book_categories:
 
 ## 🔧 高级用法
 
+### Dry-Run 预演模式
+
+无需真正发送到 Flomo，先在本地预演同步效果：
+
+```bash
+export DRY_RUN=true
+python sync.py
+```
+
+取消预演：`unset DRY_RUN`
+
 ### 自定义模板
 
 在 `config.yaml` 中添加你的模板：
@@ -624,6 +635,8 @@ GitHub Actions 的 `schedule` 不保证精确时间：
 ---
 
 ## 🎨 路线图
+
+更多设计思考与优化路线请参考： [docs/DEEP_FEATURE_ANALYSIS_CN.md](docs/DEEP_FEATURE_ANALYSIS_CN.md)
 
 ### 已完成 ✅
 

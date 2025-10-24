@@ -7,8 +7,11 @@ import requests
 import json
 from http.cookies import SimpleCookie
 from requests.utils import cookiejar_from_dict
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from typing import Dict, List, Optional
 from dotenv import load_dotenv
+from .config_manager import config
 
 # 加载环境变量
 load_dotenv()
@@ -57,6 +60,18 @@ def init_session(cookie_string: str):
     """
     global _session
     _session = requests.Session()
+
+    # 安装带重试的适配器（429/5xx自动重试，指数退避）
+    retries = Retry(
+        total=config.get_max_retries(),
+        backoff_factor=0.5,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["GET", "POST"],
+        raise_on_status=False,
+    )
+    adapter = HTTPAdapter(max_retries=retries, pool_connections=10, pool_maxsize=10)
+    _session.mount("https://", adapter)
+    _session.mount("http://", adapter)
 
     # ⚠️ 关键修改：直接在 headers 中设置 Cookie（mcp-server-weread 的做法）
     _session.headers.update({
