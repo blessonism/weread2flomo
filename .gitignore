@@ -1,70 +1,35 @@
-# Byte-compiled / optimized / DLL files
+# Python
 __pycache__/
 *.py[cod]
-*$py.class
-
-# C extensions
-*.so
-
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
+*.pyo
+*.pyd
 *.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-
-# PyInstaller
-*.manifest
-*.spec
-
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-.pytest_cache/
-cover/
+.dist/
+.build/
 
 # Environments
 .env
-.venv
-env/
+.venv/
 venv/
-ENV/
-env.bak/
-venv.bak/
 
-# IDEs
+# IDE/editor
 .vscode/
 .idea/
-*.swp
-*.swo
-*~
+*.iml
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Project specific
-# synced_bookmarks.json - 注释掉，GitHub Actions 需要提交此文件
+# Logs
 *.log
+
+# Cache
+.cache/
+.pytest_cache/
+
+# Node (if any demos)
+node_modules/
+
+# Do NOT ignore synced_bookmarks.json (GH Actions depends on committing it)
+# synced_bookmarks.json

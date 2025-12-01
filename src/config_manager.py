@@ -41,29 +41,44 @@ class ConfigManager:
             return self.get_default_config()
 
     def get_default_config(self) -> Dict[str, Any]:
-        """获取默认配置"""
-        return {
-            'sync': {
-                'days_limit': 7,
-                'max_highlights_per_sync': 50,
-                'sync_reviews': True
-            },
-            'default_template': 'simple',
-            'tags': {
-                'default': ['#微信读书'],
-                'add_book_title': True,
-                'add_author': False,
-                'enable_ai_tags': False,
-                'max_ai_tags': 3
-            },
-            'ai': {
-                'provider': 'none'
-            },
-            'advanced': {
-                'request_delay': 1.0,
-                'log_level': 'INFO'
-            }
-        }
+         """获取默认配置"""
+         return {
+             'sync': {
+                 'days_limit': 7,
+                 'max_highlights_per_sync': 50,
+                 'sync_reviews': True
+             },
+             'default_template': 'simple',
+             'tags': {
+                 'default': ['#微信读书'],
+                 'add_book_title': True,
+                 'add_author': False,
+                 'enable_ai_tags': False,
+                 'max_ai_tags': 3,
+                 'use_hierarchical_tags': True
+             },
+             'ai': {
+                 'provider': 'none',
+                 'api_base': 'https://api.openai.com/v1',
+                 'model': 'gpt-3.5-turbo',
+                 'enable_summary': False,
+                 'summary_min_length': 100,
+                 'tag_prompt': (
+                     '请为以下摘录生成 1-3 个中文标签，以#开头，单个词或短语，贴合主题：\n'
+                     '书名：{book_title}\n作者：{author}\n摘录：{highlight_text}\n'
+                     '仅输出标签，用空格分隔。'
+                 ),
+                 'summary_prompt': (
+                     '请用一句中文话概括以下内容的核心观点，简洁有力：\n'
+                     '书名：{book_title}\n作者：{author}\n摘录：{highlight_text}\n'
+                     '仅输出一句话，不要额外说明。'
+                 )
+             },
+             'advanced': {
+                 'request_delay': 1.0,
+                 'log_level': 'INFO'
+             }
+         }
 
     def get(self, key: str, default: Any = None, env_key: Optional[str] = None) -> Any:
         """

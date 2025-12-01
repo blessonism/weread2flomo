@@ -3,8 +3,9 @@ AI 摘要生成器
 为长划线生成一句话摘要
 """
 import os
+import time
 import requests
-from typing import Optional
+from typing import Optional, Tuple
 from .config_manager import config
 
 
@@ -20,6 +21,8 @@ class AISummaryGenerator:
         
         # 摘要启用阈值（字符数）
         self.min_length = config.get('ai.summary_min_length', 100)
+        self._cache = {}
+        self._max_cache = 200
 
     def is_enabled(self) -> bool:
         """检查 AI 摘要是否启用"""
@@ -58,11 +61,26 @@ class AISummaryGenerator:
         if not self.should_summarize(highlight_text):
             return None
 
+        cache_key: Tuple[str, str, str] = (
+            book_title or "",
+            author or "",
+            highlight_text,
+        )
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+
         try:
-            return self._generate_with_openai(highlight_text, book_title, author)
+            summary = self._generate_with_openai(highlight_text, book_title, author)
         except Exception as e:
             print(f"   ⚠️  AI 摘要生成失败: {e}")
-            return None
+            summary = None
+
+        if summary:
+            if len(self._cache) >= self._max_cache:
+                self._cache.clear()
+            self._cache[cache_key] = summary
+
+        return summary
 
     def _generate_with_openai(
         self,
@@ -75,7 +93,13 @@ class AISummaryGenerator:
             return None
 
         # 构建提示词
-        prompt = config.get('ai.summary_prompt', '').format(
+        raw_prompt = config.get('ai.summary_prompt', '')
+        if not raw_prompt:
+            raw_prompt = (
+                '请用一句中文话精准概括以下内容的核心观点，不要输出多余解释：\n'
+                '书名：{book_title}\n作者：{author}\n摘录：{highlight_text}'
+            )
+        prompt = raw_prompt.format(
             highlight_text=highlight_text,
             book_title=book_title or '',
             author=author or ''
@@ -96,13 +120,22 @@ class AISummaryGenerator:
             'max_tokens': 150
         }
 
-        response = requests.post(url, headers=headers, json=data, timeout=30)
-        response.raise_for_status()
-
-        result = response.json()
-        summary = result['choices'][0]['message']['content'].strip()
-
-        return summary if summary else None
+        max_retries = max(1, int(config.get_max_retries()))
+        backoff = 0.8
+        last_err = None
+        for attempt in range(max_retries):
+            try:
+                response = requests.post(url, headers=headers, json=data, timeout=30)
+                response.raise_for_status()
+                result = response.json()
+                summary = result['choices'][0]['message']['content'].strip()
+                return summary if summary else None
+            except Exception as e:
+                last_err = e
+                if attempt < max_retries - 1:
+                    time.sleep(backoff * (2 ** attempt))
+                else:
+                    raise last_err
 
 
 if __name__ == "__main__":

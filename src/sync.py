@@ -6,6 +6,8 @@ import os
 import sys
 import time
 import json
+import re
+import hashlib
 from datetime import datetime, timedelta
 from typing import Dict, List, Set, Optional
 
@@ -25,6 +27,7 @@ try:
     from .template_renderer import TemplateRenderer, TagGenerator
     from .ai_tags import AITagGenerator
     from .ai_summary import AISummaryGenerator
+    from .log_utils import setup_logging
 except ImportError:
     # 如果相对导入失败，使用绝对导入（直接运行）
     # 将项目根目录添加到 sys.path
@@ -42,6 +45,7 @@ except ImportError:
     from src.template_renderer import TemplateRenderer, TagGenerator
     from src.ai_tags import AITagGenerator
     from src.ai_summary import AISummaryGenerator
+    from src.log_utils import setup_logging
 
 
 class SyncStatistics:
@@ -114,6 +118,7 @@ class WeRead2FlomoV2:
 
         self.synced_file = "synced_bookmarks.json"
         self.synced_ids = self.load_synced_ids()
+        self.synced_fingerprints = self.load_synced_fingerprints()
 
         # 配置参数
         self.days_limit = config.get_days_limit()
@@ -174,26 +179,60 @@ class WeRead2FlomoV2:
                 print(f"⚠️  加载同步记录失败: {e}")
         return set()
 
+    def load_synced_fingerprints(self) -> Set[str]:
+        """加载已同步的内容指纹（用于模糊去重的简单版）"""
+        if os.path.exists(self.synced_file):
+            try:
+                with open(self.synced_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    return set(data.get("synced_fingerprints", []))
+            except Exception as e:
+                print(f"⚠️  加载指纹记录失败: {e}")
+        return set()
+
     def save_synced_ids(self):
-        """保存已同步的划线ID"""
+        """保存已同步记录（ID 与指纹，原子写入）"""
         try:
-            with open(self.synced_file, 'w', encoding='utf-8') as f:
-                json.dump({
-                    "synced_ids": list(self.synced_ids),
-                    "last_sync": datetime.now().isoformat(),
-                    "total_synced": len(self.synced_ids)
-                }, f, ensure_ascii=False, indent=2)
+            import tempfile
+            import os as _os
+            dir_name = _os.path.dirname(_os.path.abspath(self.synced_file)) or "."
+            data = {
+                "version": 2,
+                "synced_ids": list(self.synced_ids),
+                "synced_fingerprints": list(getattr(self, "synced_fingerprints", set()) or []),
+                "last_sync": datetime.now().isoformat(),
+                "total_synced": len(self.synced_ids)
+            }
+            with tempfile.NamedTemporaryFile('w', delete=False, dir=dir_name, encoding='utf-8') as tf:
+                json.dump(data, tf, ensure_ascii=False, indent=2)
+                temp_name = tf.name
+            _os.replace(temp_name, self.synced_file)
         except Exception as e:
             print(f"⚠️  保存同步记录失败: {e}")
+
+    def _normalize_text(self, s: str) -> str:
+        """归一化文本用于指纹计算：移除空白与标点，英文转小写。"""
+        if not s:
+            return ""
+        # 合并所有字母数字下划线（Unicode 下 \w 包含中文等字母类），去掉其他符号
+        tokens = re.findall(r"\w+", s, flags=re.UNICODE)
+        return "".join(tokens).lower()
+
+    def _fingerprint(self, text: str) -> str:
+        """计算简易指纹：基于归一化文本的 SHA1。"""
+        norm = self._normalize_text(text)
+        return hashlib.sha1(norm.encode("utf-8")).hexdigest()
 
     def get_chapter_name(self, chapters: List[Dict], chapterUid: int) -> str:
         """根据章节UID获取章节名称"""
         for chapter in chapters:
             if chapter.get("chapterUid") == chapterUid:
                 title = chapter.get("title", "")
-                level = chapter.get("level", 1)
-                if title:
-                    return f"第{level}章 - {title}"
+                # level 表示层级深度，非章节序号，这里优先使用 chapterIdx
+                idx = chapter.get("chapterIdx")
+                if title and isinstance(idx, int):
+                    return f"第{idx}章 - {title}"
+                return title or ""
         return ""
 
     def should_sync_bookmark(self, bookmark: Dict) -> bool:
@@ -208,8 +247,14 @@ class WeRead2FlomoV2:
         """
         bookmark_id = bookmark.get("bookmarkId")
 
-        # 检查是否已同步
+        # 基于划线ID的快速去重
         if bookmark_id in self.synced_ids:
+            return False
+
+        # 基于内容指纹的去重（处理ID变化或轻微改动的重复）
+        marked_text = bookmark.get("markText", "") or ""
+        fp = self._fingerprint(marked_text)
+        if fp and fp in self.synced_fingerprints:
             return False
 
         # 检查时间限制
@@ -384,11 +429,22 @@ class WeRead2FlomoV2:
                 ai_summary=ai_summary or ""
             )
 
-            # 发送到 flomo
+            # 发送到 flomo（Dry-Run 模式下打印预览）
+            if getattr(self.flomo_client, "dry_run", False):
+                print("\n--- 预演内容预览 ---")
+                print(content)
+                print("--- 预演结束 ---\n")
             success = self.flomo_client.send_memo(content)
 
             if success:
                 self.synced_ids.add(bookmark_id)
+                # 记录内容指纹，增强去重稳态
+                try:
+                    fp = self._fingerprint(marked_text)
+                    if fp:
+                        self.synced_fingerprints.add(fp)
+                except Exception:
+                    pass
                 synced_count += 1
                 book_synced_count += 1
                 # 添加延迟
@@ -559,6 +615,8 @@ class WeRead2FlomoV2:
 def main():
     """主函数"""
     try:
+        # 初始化日志
+        setup_logging()
         syncer = WeRead2FlomoV2()
         syncer.sync_all()
     except Exception as e:

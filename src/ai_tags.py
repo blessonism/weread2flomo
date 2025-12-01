@@ -3,8 +3,9 @@ AI 标签生成器
 支持多种 AI 服务提供商
 """
 import os
+import time
 import requests
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from .config_manager import config
 
 
@@ -17,6 +18,8 @@ class AITagGenerator:
         self.api_key = config.get_ai_api_key()
         self.api_base = config.get_ai_api_base()
         self.model = config.get_ai_model()
+        self._cache = {}
+        self._max_cache = 200
 
     def is_enabled(self) -> bool:
         """检查 AI 标签是否启用"""
@@ -42,17 +45,29 @@ class AITagGenerator:
         if not self.is_enabled():
             return []
 
+        cache_key: Tuple[str, str, str] = (book_title, author, highlight_text)
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+
         try:
             if self.provider == 'openai':
-                return self._generate_with_openai(book_title, author, highlight_text)
+                tags = self._generate_with_openai(book_title, author, highlight_text)
             elif self.provider == 'local':
-                return self._generate_with_local(book_title, author, highlight_text)
+                tags = self._generate_with_local(book_title, author, highlight_text)
             else:
                 print(f"⚠️  不支持的 AI 提供商: {self.provider}")
-                return []
+                tags = []
         except Exception as e:
             print(f"⚠️  AI 标签生成失败: {e}")
-            return []
+            tags = []
+
+        # 写入缓存（简单上限控制）
+        if tags:
+            if len(self._cache) >= self._max_cache:
+                self._cache.clear()
+            self._cache[cache_key] = tags
+
+        return tags
 
     def _generate_with_openai(
         self,
@@ -66,7 +81,13 @@ class AITagGenerator:
             return []
 
         # 构建提示词
-        prompt = config.get('ai.tag_prompt', '').format(
+        raw_prompt = config.get('ai.tag_prompt', '')
+        if not raw_prompt:
+            raw_prompt = (
+                '请为以下摘录生成 1-3 个中文标签，以#开头，单个词或短语，贴合主题，空格分隔：\n'
+                '书名：{book_title}\n作者：{author}\n摘录：{highlight_text}'
+            )
+        prompt = raw_prompt.format(
             book_title=book_title,
             author=author,
             highlight_text=highlight_text
@@ -87,15 +108,23 @@ class AITagGenerator:
             'max_tokens': 100
         }
 
-        response = requests.post(url, headers=headers, json=data, timeout=30)
-        response.raise_for_status()
-
-        result = response.json()
-        content = result['choices'][0]['message']['content'].strip()
-
-        # 解析标签
-        tags = self._parse_tags(content)
-        return tags[:config.get('tags.max_ai_tags', 3)]
+        max_retries = max(1, int(config.get_max_retries()))
+        backoff = 0.8
+        last_err = None
+        for attempt in range(max_retries):
+            try:
+                response = requests.post(url, headers=headers, json=data, timeout=30)
+                response.raise_for_status()
+                result = response.json()
+                content = result['choices'][0]['message']['content'].strip()
+                tags = self._parse_tags(content)
+                return tags[:config.get('tags.max_ai_tags', 3)]
+            except Exception as e:
+                last_err = e
+                if attempt < max_retries - 1:
+                    time.sleep(backoff * (2 ** attempt))
+                else:
+                    raise last_err
 
     def _generate_with_local(
         self,

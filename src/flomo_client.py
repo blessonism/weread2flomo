@@ -2,10 +2,14 @@
 Flomo API 客户端
 """
 import os
+import time
 import requests
 import json
 from typing import Dict, Optional
 from dotenv import load_dotenv
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+from .config_manager import config
 
 load_dotenv()
 
@@ -24,8 +28,26 @@ class FlomoClient:
         if not self.api_url:
             raise ValueError("请设置 FLOMO_API 环境变量或提供 api_url 参数")
 
-        self.daily_limit = 100
+        # 每日配额和 dry-run
+        try:
+            self.daily_limit = int(os.getenv("FLOMO_DAILY_LIMIT", "100"))
+        except ValueError:
+            self.daily_limit = 100
+        self.dry_run = str(os.getenv("DRY_RUN", "false")).lower() in ("1", "true", "yes")
         self.request_count = 0
+
+        # 带重试的 Session
+        self.session = requests.Session()
+        retries = Retry(
+            total=config.get_max_retries(),
+            backoff_factor=0.5,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["GET", "POST"],
+            raise_on_status=False,
+        )
+        adapter = HTTPAdapter(max_retries=retries, pool_connections=5, pool_maxsize=5)
+        self.session.mount("https://", adapter)
+        self.session.mount("http://", adapter)
 
     def send_memo(self, content: str) -> bool:
         """
@@ -41,27 +63,53 @@ class FlomoClient:
             print(f"已达到每日API调用限制（{self.daily_limit}次）")
             return False
 
-        try:
-            data = {"content": content}
-            response = requests.post(
-                self.api_url,
-                headers={"Content-Type": "application/json"},
-                json=data,
-                timeout=10
-            )
-
+        if self.dry_run:
             self.request_count += 1
+            print(f"[DRY-RUN] 模拟发送到 flomo (第 {self.request_count} 次)，长度={len(content)}")
+            return True
 
-            if response.ok:
-                print(f"✓ 成功发送笔记到 flomo (第 {self.request_count} 次)")
-                return True
-            else:
-                print(f"✗ 发送失败: {response.status_code} - {response.text}")
+        data = {"content": content}
+        max_retries = max(1, int(config.get_max_retries()))
+        backoff = 0.8
+
+        for attempt in range(max_retries):
+            try:
+                response = self.session.post(
+                    self.api_url,
+                    headers={"Content-Type": "application/json"},
+                    json=data,
+                    timeout=10
+                )
+
+                # 计数只在请求真正发出时递增
+                self.request_count += 1
+
+                if response.ok:
+                    print(f"✓ 成功发送笔记到 flomo (第 {self.request_count} 次)")
+                    return True
+
+                status = response.status_code
+                body_preview = response.text[:200] if response.text else ""
+                # 对 429/5xx 做重试
+                if status in (429, 500, 502, 503, 504) and attempt < max_retries - 1:
+                    sleep_s = backoff * (2 ** attempt)
+                    print(f"⚠️ flomo 返回 {status}，{sleep_s:.1f}s 后重试... body={body_preview}")
+                    time.sleep(sleep_s)
+                    continue
+
+                print(f"✗ 发送失败: {status} - {body_preview}")
                 return False
 
-        except Exception as e:
-            print(f"✗ 发送笔记时出错: {e}")
-            return False
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    sleep_s = backoff * (2 ** attempt)
+                    print(f"⚠️ 发送异常: {e}，{sleep_s:.1f}s 后重试...")
+                    time.sleep(sleep_s)
+                    continue
+                print(f"✗ 发送笔记时出错: {e}")
+                return False
+
+        return False
 
     def send_weread_highlight(
         self,
